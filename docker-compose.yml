@@ -9,8 +9,12 @@ services:
       - 5000:5000
 
   frontend:
-    build: ./client
+    build:
+      context: ./client
+      args:
+        VITE_API_URL: http://72.60.203.57:5000/api
     container_name: frontend
+
     restart: always
     env_file:
       - ./client/.env
