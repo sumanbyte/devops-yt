@@ -42,3 +42,45 @@ jobs:
 
       - name: Build frontend image
         run: docker build -t frontend ./client
+
+  deploy:
+    needs: build-and-lint
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (optional)
+        uses: actions/checkout@v4
+
+      - name: Add EC2 host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+
+      - name: Write SSH key
+        run: |
+          echo "${VPS_SSH_KEY}" > VPS_SSH_KEY.pem
+          chmod 600 VPS_SSH_KEY.pem
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Deploy on EC2 (git pull + docker compose up -d --build)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          ssh -i VPS_SSH_KEY.pem ${VPS_USER}@${VPS_HOST} << EOF
+            set -e
+            cd "${VPS_DEPLOY_PATH}"
+
+            git fetch --all
+            git reset --hard origin/main
+
+            docker compose up -d --build
+
+            docker image prune -f
+
+            docker compose ps
+          EOF
